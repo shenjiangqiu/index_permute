@@ -16,6 +16,16 @@ This crate allows you to **reorder a slice in place by an index array**, even wh
 
 ---
 
+## Example
+
+```rust
+use index_permute::PermuteIndex;
+let index = PermuteIndex::try_new(&[2, 0, 1]).unwrap();
+let mut data = vec![10, 20, 30];
+index_permute::order_by_index_inplace(&mut data, index);
+assert_eq!(data, vec![30, 10, 20]);
+```
+
 ## 📦 Installation
 
 Add this to your `Cargo.toml`:

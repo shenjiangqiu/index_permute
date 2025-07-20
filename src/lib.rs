@@ -1,6 +1,16 @@
 //! - A tool to reorder an array by an index array inplace when the elements are not `Clone` or `Copy`.
 //! - lock-free parallel implementation.
-//!
+//! ## Example
+//! ```
+//! use index_permute::PermuteIndex;
+//! let index = PermuteIndex::try_new(&[2, 0, 1
+//! ]).unwrap();
+//! let mut data = vec![10, 20, 30];
+//! index_permute::order_by_index_inplace(&mut data, index);
+//! assert_eq!(data, vec![30, 10, 20]);
+//! ```
+#![deny(missing_docs)]
+#![deny(warnings)]
 
 use std::{mem::forget, ptr};
 use thiserror::Error;
@@ -25,10 +35,14 @@ use thiserror::Error;
 pub struct PermuteIndex<T> {
     data: T,
 }
+
+/// An error type for `PermuteIndex` and `try_order_by_index_inplace`.
 #[derive(Debug, Error)]
 pub enum PermuteError {
+    /// An error indicating that the index is invalid.
     #[error("Invalid index: indices must be unique and in 0..len")]
     InvalidIndex,
+    /// An error indicating that the index length does not match the data length.
     #[error("Index length must match data length")]
     LengthMismatch,
 }
