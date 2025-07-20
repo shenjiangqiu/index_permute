@@ -32,6 +32,15 @@ use thiserror::Error;
 /// index_permute::order_by_index_inplace(&mut data, index);
 /// assert_eq!(data, vec![30, 10, 20]);
 /// ```
+///
+/// You can also create a `PermuteIndex` from a vector or slice:
+/// ```
+/// use index_permute::PermuteIndex;
+/// let _ = PermuteIndex::try_new(&[0usize, 2, 1]);
+/// let _ = PermuteIndex::try_new(vec![0, 1, 2]);
+/// let _ = PermuteIndex::try_new(&vec![0, 1, 2]);
+/// let _ = PermuteIndex::try_new(&[0, 1, 2][..]);
+/// ```
 pub struct PermuteIndex<T> {
     data: T,
 }
@@ -76,6 +85,14 @@ where
     /// let mut data = vec![10, 20, 30];
     /// index_permute::order_by_index_inplace(&mut data, index);
     /// assert_eq!(data, vec![30, 10, 20]);
+    /// ```
+    /// You can also create a `PermuteIndex` from a vector or slice:
+    /// ```
+    /// use index_permute::PermuteIndex;
+    /// let _ = PermuteIndex::try_new(&[0usize, 2, 1]);
+    /// let _ = PermuteIndex::try_new(vec![0, 1, 2]);
+    /// let _ = PermuteIndex::try_new(&vec![0, 1, 2]);
+    /// let _ = PermuteIndex::try_new(&[0, 1, 2][..]);
     /// ```
     pub fn try_new(index: T) -> Result<Self, PermuteError> {
         if Self::check_index(&index) {

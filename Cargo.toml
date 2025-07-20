@@ -1,6 +1,6 @@
 [package]
 name = "index_permute"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 repository = "https://github.com/shenjiangqiu/index_permute"
 description = "A library for permuting a slice which elements are not Clone or Copy in Rust"
