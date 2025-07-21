@@ -14,7 +14,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 
-use std::ptr;
+use std::{mem::MaybeUninit, ptr};
 use thiserror::Error;
 mod macro_rules;
 
@@ -143,25 +143,25 @@ where
     // so we can move elements without overlap.
 
     // Create a Vec<T> with uninitialized memory
-    let mut temp: Vec<T> = Vec::with_capacity(len);
+    let mut temp: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
     unsafe {
-        temp.set_len(len);
+        temp.resize_with(len, MaybeUninit::uninit);
 
         for (i, &idx) in indices.iter().enumerate() {
             // Move from data[idx] to temp[i]
-            ptr::write(
-                temp.get_unchecked_mut(i),
-                ptr::read(data.get_unchecked(idx)),
-            );
+            let value = ptr::read(data.get_unchecked(idx));
+            // SAFETY: We are writing to an uninitialized memory location
+            temp.get_unchecked_mut(i).write(value);
         }
 
         // Move back from temp to data
         for i in 0..len {
-            ptr::write(data.get_unchecked_mut(i), ptr::read(temp.get_unchecked(i)));
+            // SAFETY: We are reading from an initialized MaybeUninit<T>
+            let value = temp.get_unchecked(i).as_ptr().read();
+            // Move to data[i]
+            ptr::write(data.get_unchecked_mut(i), value);
         }
-        // should not forget `temp`, it should be dropped, but the items should not be deallocated, because they are moved to data
-        // so we prevent deallocation of `temp` by setting its length to 0
-        temp.set_len(0); // Prevent deallocation of temp
+        drop(temp); 
     }
     Ok(())
 }
