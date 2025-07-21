@@ -12,7 +12,7 @@
 #![deny(missing_docs)]
 #![deny(warnings)]
 
-use std::{mem::forget, ptr};
+use std::ptr;
 use thiserror::Error;
 
 /// A struct to hold a permutation index.
@@ -146,7 +146,9 @@ where
         for i in 0..len {
             ptr::write(data.get_unchecked_mut(i), ptr::read(temp.get_unchecked(i)));
         }
-        forget(temp); // Prevent deallocation of temp
+        // should not forget `temp`, it should be dropped, but the items should not be deallocated, because they are moved to data
+        // so we prevent deallocation of `temp` by setting its length to 0
+        temp.set_len(0); // Prevent deallocation of temp
     }
     Ok(())
 }
