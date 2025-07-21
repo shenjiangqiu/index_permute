@@ -1,3 +1,5 @@
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/shenjiangqiu/index_permute/rust.yml)
+
 # 🌀 index_permute
 
 A minimal, **in-place**, and **non-cloning** array permutation library for Rust.
