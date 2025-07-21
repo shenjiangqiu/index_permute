@@ -1,4 +1,5 @@
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/shenjiangqiu/index_permute/rust.yml)
+![Crates.io Version](https://img.shields.io/crates/v/index_permute)
 
 # 🌀 index_permute
 
