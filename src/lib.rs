@@ -14,6 +14,8 @@
 
 use std::ptr;
 use thiserror::Error;
+mod macro_rules;
+
 
 /// A struct to hold a permutation index.
 /// The index must be unique and in the range of `0..len`, where `len` is the length of the data to be permuted.
@@ -181,6 +183,7 @@ where
     }
 }
 
+cfg_parallel! {
 /// Only valid when features `parallel` is enabled.
 /// A parallel version of [`try_order_by_index_inplace`].
 /// # Parameters
@@ -194,7 +197,6 @@ where
 /// ```
 // Improved parallel version
 
-#[cfg(feature = "parallel")]
 pub fn try_order_by_index_parallel_inplace_with_threads<T, I>(
     data: &mut [T],
     index: PermuteIndex<I>,
@@ -258,7 +260,6 @@ where
 }
 /// Same as [`try_order_by_index_parallel_inplace_with_threads`] but uses the number of available CPU cores.
 /// Only valid when features `parallel` is enabled.
-#[cfg(feature = "parallel")]
 pub fn try_order_by_index_parallel_inplace<T, I>(
     data: &mut [T],
     index: PermuteIndex<I>,
@@ -270,7 +271,7 @@ where
     let num_threads = num_cpus::get();
     try_order_by_index_parallel_inplace_with_threads(data, index, num_threads)
 }
-
+}
 #[cfg(test)]
 mod tests {
     use super::*;
