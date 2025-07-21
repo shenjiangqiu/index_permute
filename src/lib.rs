@@ -41,6 +41,7 @@ use thiserror::Error;
 /// let _ = PermuteIndex::try_new(&vec![0, 1, 2]);
 /// let _ = PermuteIndex::try_new(&[0, 1, 2][..]);
 /// ```
+#[derive(Debug, Clone)]
 pub struct PermuteIndex<T> {
     data: T,
 }
@@ -100,6 +101,14 @@ where
         } else {
             Err(PermuteError::InvalidIndex)
         }
+    }
+
+    /// Creates a new [`PermuteIndex`] without checking the validity of the index.
+    /// also see [`PermuteIndex::try_new`].
+    pub unsafe fn new_unchecked(index: T) -> Self {
+        // This function is unsafe because it does not check the validity of the index.
+        // It should only be used when you are sure that the index is valid.
+        PermuteIndex { data: index }
     }
 }
 
@@ -172,6 +181,96 @@ where
     }
 }
 
+/// Only valid when features `parallel` is enabled.
+/// A parallel version of [`try_order_by_index_inplace`].
+/// # Parameters
+/// - `data`: The data to be permuted.
+/// - `index`: The permutation index, which must be a valid [`PermuteIndex`].
+/// - `num_threads`: The number of threads to use for parallel processing.
+/// # Returns
+/// - `Ok(())` if the operation was successful.
+/// - `Err(PermuteError)` if the index is invalid or the lengths do not match.
+///
+/// ```
+// Improved parallel version
+
+#[cfg(feature = "parallel")]
+pub fn try_order_by_index_parallel_inplace_with_threads<T, I>(
+    data: &mut [T],
+    index: PermuteIndex<I>,
+    num_threads: usize,
+) -> Result<(), PermuteError>
+where
+    I: AsRef<[usize]>,
+    T: Sync + Send,
+{
+    let len = data.len();
+
+    if len < 10_000 || num_threads <= 1 {
+        return try_order_by_index_inplace(data, index);
+    }
+
+    if len != index.data.as_ref().len() {
+        return Err(PermuteError::LengthMismatch);
+    }
+
+    let indices = index.data.as_ref();
+    let chunk_size = (len + num_threads - 1) / num_threads;
+
+    // Create buffer with proper initialization
+    let mut buffer: Vec<std::mem::MaybeUninit<T>> = Vec::with_capacity(len);
+    buffer.resize_with(len, std::mem::MaybeUninit::uninit);
+
+    // Convert data to shared reference for reading
+    let data_ref = &*data;
+
+    let index_chunks = indices.chunks(chunk_size);
+    let buffer_chunks = buffer.chunks_mut(chunk_size);
+    // Parallel phase 1: Read from data according to indices, write to buffer
+    std::thread::scope(|s| {
+        for (indices_slice, buffer_slice) in index_chunks.zip(buffer_chunks) {
+            s.spawn(move || {
+                for (i, &src_idx) in indices_slice.iter().enumerate() {
+                    // Safe read from source
+                    let value = unsafe { ptr::read(data_ref.get_unchecked(src_idx)) };
+                    // Safe write to buffer
+                    unsafe {
+                        buffer_slice.get_unchecked_mut(i).write(value);
+                    }
+                }
+            });
+        }
+    });
+
+    // Now buffer contains all the reordered data
+    // Phase 2: Move from buffer back to data
+    unsafe {
+        for i in 0..len {
+            let value = buffer.get_unchecked(i).as_ptr().read();
+            ptr::write(data.get_unchecked_mut(i), value);
+        }
+    }
+
+    // Buffer will be dropped but MaybeUninit won't drop the T values
+    std::mem::drop(buffer);
+
+    Ok(())
+}
+/// Same as [`try_order_by_index_parallel_inplace_with_threads`] but uses the number of available CPU cores.
+/// Only valid when features `parallel` is enabled.
+#[cfg(feature = "parallel")]
+pub fn try_order_by_index_parallel_inplace<T, I>(
+    data: &mut [T],
+    index: PermuteIndex<I>,
+) -> Result<(), PermuteError>
+where
+    I: AsRef<[usize]>,
+    T: Sync + Send,
+{
+    let num_threads = num_cpus::get();
+    try_order_by_index_parallel_inplace_with_threads(data, index, num_threads)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +315,43 @@ mod tests {
         assert_eq!(data[0].value, 3);
         assert_eq!(data[1].value, 1);
         assert_eq!(data[2].value, 2);
+    }
+
+    #[test]
+    #[cfg(feature = "parallel")]
+    fn test_order_by_index_parallel() {
+        let mut data = (0..1000).collect::<Vec<_>>();
+        let index = PermuteIndex::try_new((0..1000).rev().collect::<Vec<_>>()).unwrap();
+        assert!(try_order_by_index_parallel_inplace(&mut data, index).is_ok());
+        assert_eq!(data, (0..1000).rev().collect::<Vec<_>>());
+    }
+
+    #[test]
+    #[cfg(feature = "parallel")]
+    fn test_order_by_index_drop() {
+        struct DropTest {
+            value: usize,
+        }
+        impl Drop for DropTest {
+            fn drop(&mut self) {
+                print!(".",);
+            }
+        }
+        let test_size = 10001;
+        let mut data = (0..test_size)
+            .map(|i| DropTest { value: i })
+            .collect::<Vec<_>>();
+        let index = PermuteIndex::try_new((0..test_size).rev().collect::<Vec<_>>()).unwrap();
+
+        // now, there should be no drop
+        try_order_by_index_parallel_inplace_with_threads(&mut data, index, 4).unwrap();
+        println!("no drop should happen here");
+
+        // assert_eq!(data[0].value, 999);
+        // assert_eq!(data[1].value, 998);
+        // assert_eq!(data[2].value, 997);
+        for i in 0..test_size {
+            assert_eq!(data[i].value, test_size - 1 - i);
+        }
     }
 }

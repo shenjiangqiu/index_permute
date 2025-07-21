@@ -12,7 +12,7 @@ This crate allows you to **reorder a slice in place by an index array**, even wh
 - ✅ Memory-safe: no element dropped or cloned during permutation.
 - ✅ Index validation: ensures the index is a true permutation (`0..N`).
 - ✅ Safe, ergonomic API.
-- 🚧 `parallel` feature is defined but **not yet implemented**.
+- ✅  `parallel` feature is defined, but it has limited speedup due to it's memory-bound nature. On benchmarks, it shows a 1.3x speedup on a 10 million element array.
 
 ---
 
