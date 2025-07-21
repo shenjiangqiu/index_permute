@@ -26,7 +26,7 @@ impl MediumData {
 }
 
 const TEST_SIZE: usize = 10000000;
-pub fn criterion_benchmark(c: &mut Criterion) {
+pub fn bench_seq(c: &mut Criterion) {
     let index = (0..TEST_SIZE).rev().collect::<Vec<_>>();
     let index = PermuteIndex::try_new(&index).unwrap();
     let mut data = (0..TEST_SIZE).collect::<Vec<_>>();
@@ -66,40 +66,43 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             black_box(&mut big_data);
         });
     });
-
-    c.bench_function("permute_parallel_small", |b| {
-        b.iter(|| {
-            index_permute::try_order_by_index_parallel_inplace(
-                black_box(&mut data),
-                black_box(index.clone()),
-            )
-            .unwrap();
-            black_box(&mut data);
-        });
-    });
-
-    c.bench_function("permute_parallel_medium", |b| {
-        b.iter(|| {
-            index_permute::try_order_by_index_parallel_inplace(
-                black_box(&mut medium_data),
-                black_box(index.clone()),
-            )
-            .unwrap();
-            black_box(&mut medium_data);
-        });
-    });
-
-    c.bench_function("permute_parallel_big", |b| {
-        b.iter(|| {
-            index_permute::try_order_by_index_parallel_inplace(
-                black_box(&mut big_data),
-                black_box(index.clone()),
-            )
-            .unwrap();
-            black_box(&mut big_data);
-        });
-    });
 }
+pub fn bench_parallel(c: &mut Criterion) {
+    #[cfg(feature = "parallel")]
+    {
+        c.bench_function("permute_parallel_small", |b| {
+            b.iter(|| {
+                index_permute::try_order_by_index_parallel_inplace(
+                    black_box(&mut data),
+                    black_box(index.clone()),
+                )
+                .unwrap();
+                black_box(&mut data);
+            });
+        });
 
-criterion_group!(benches, criterion_benchmark);
+        c.bench_function("permute_parallel_medium", |b| {
+            b.iter(|| {
+                index_permute::try_order_by_index_parallel_inplace(
+                    black_box(&mut medium_data),
+                    black_box(index.clone()),
+                )
+                .unwrap();
+                black_box(&mut medium_data);
+            });
+        });
+
+        c.bench_function("permute_parallel_big", |b| {
+            b.iter(|| {
+                index_permute::try_order_by_index_parallel_inplace(
+                    black_box(&mut big_data),
+                    black_box(index.clone()),
+                )
+                .unwrap();
+                black_box(&mut big_data);
+            });
+        });
+    }
+}
+criterion_group!(benches, bench_seq, bench_parallel);
 criterion_main!(benches);
