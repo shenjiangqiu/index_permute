@@ -194,8 +194,7 @@ cfg_parallel! {
 /// - `Ok(())` if the operation was successful.
 /// - `Err(PermuteError)` if the index is invalid or the lengths do not match.
 ///
-/// ```
-// Improved parallel version
+/// Improved parallel version
 
 pub fn try_order_by_index_parallel_inplace_with_threads<T, I>(
     data: &mut [T],

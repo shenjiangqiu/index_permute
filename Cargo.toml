@@ -1,11 +1,12 @@
 [package]
 name = "index_permute"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 repository = "https://github.com/shenjiangqiu/index_permute"
 description = "A library for permuting a slice which elements are not Clone or Copy in Rust"
 authors = ["Jiangqiu Shen <ivy22233qiu@live.com>"]
 license = "MIT OR Apache-2.0"
+readme = "README.md"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -25,3 +26,4 @@ parallel = ["num_cpus"]
 [[bench]]
 name = "bench_parallel"
 harness = false
+
