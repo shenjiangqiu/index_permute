@@ -14,10 +14,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 
-use std::{mem::MaybeUninit, ptr};
+use std::ptr;
 use thiserror::Error;
 mod macro_rules;
-
 
 /// A struct to hold a permutation index.
 /// The index must be unique and in the range of `0..len`, where `len` is the length of the data to be permuted.
@@ -37,17 +36,17 @@ mod macro_rules;
 /// assert_eq!(data, vec![30, 10, 20]);
 /// ```
 ///
-/// You can also create a `PermuteIndex` from a vector or slice:
+/// You can also create a `PermuteIndex` from a slice:
 /// ```
 /// use index_permute::PermuteIndex;
 /// let _ = PermuteIndex::try_new(&[0usize, 2, 1]);
-/// let _ = PermuteIndex::try_new(vec![0, 1, 2]);
-/// let _ = PermuteIndex::try_new(&vec![0, 1, 2]);
+/// let vec_data = vec![0, 1, 2];
+/// let _ = PermuteIndex::try_new(&vec_data);
 /// let _ = PermuteIndex::try_new(&[0, 1, 2][..]);
 /// ```
 #[derive(Debug, Clone)]
-pub struct PermuteIndex<T> {
-    data: T,
+pub struct PermuteIndex<'a> {
+    data: &'a [usize],
 }
 
 /// An error type for [`PermuteIndex`] and [`try_order_by_index_inplace`].
@@ -60,16 +59,12 @@ pub enum PermuteError {
     #[error("Index length must match data length")]
     LengthMismatch,
 }
-impl<T> PermuteIndex<T>
-where
-    T: AsRef<[usize]>,
-{
-    fn check_index(index: &T) -> bool {
+impl<'a> PermuteIndex<'a> {
+    fn check_index(index: &[usize]) -> bool {
         // make sure all indices are unique and from 0 to len-1
-        let indices = index.as_ref();
-        let len = indices.len();
+        let len = index.len();
         let mut seen = vec![false; len];
-        for &i in indices {
+        for &i in index {
             if i >= len || seen[i] {
                 return false; // index out of bounds or duplicate
             }
@@ -91,16 +86,14 @@ where
     /// index_permute::order_by_index_inplace(&mut data, index);
     /// assert_eq!(data, vec![30, 10, 20]);
     /// ```
-    /// You can also create a `PermuteIndex` from a vector or slice:
+    /// You can also create a `PermuteIndex` from a slice:
     /// ```
     /// use index_permute::PermuteIndex;
     /// let _ = PermuteIndex::try_new(&[0usize, 2, 1]);
-    /// let _ = PermuteIndex::try_new(vec![0, 1, 2]);
-    /// let _ = PermuteIndex::try_new(&vec![0, 1, 2]);
     /// let _ = PermuteIndex::try_new(&[0, 1, 2][..]);
     /// ```
-    pub fn try_new(index: T) -> Result<Self, PermuteError> {
-        if Self::check_index(&index) {
+    pub fn try_new(index: &'a [usize]) -> Result<Self, PermuteError> {
+        if Self::check_index(index) {
             Ok(PermuteIndex { data: index })
         } else {
             Err(PermuteError::InvalidIndex)
@@ -109,7 +102,7 @@ where
 
     /// Creates a new [`PermuteIndex`] without checking the validity of the index.
     /// also see [`PermuteIndex::try_new`].
-    pub unsafe fn new_unchecked(index: T) -> Self {
+    pub unsafe fn new_unchecked(index: &'a [usize]) -> Self {
         // This function is unsafe because it does not check the validity of the index.
         // It should only be used when you are sure that the index is valid.
         PermuteIndex { data: index }
@@ -126,14 +119,11 @@ where
 /// index_permute::try_order_by_index_inplace(&mut data, index).unwrap();
 /// assert_eq!(data, vec![30, 10, 20]);
 /// ```
-pub fn try_order_by_index_inplace<T, I>(
+pub fn try_order_by_index_inplace<T>(
     data: &mut [T],
-    index: PermuteIndex<I>,
-) -> Result<(), PermuteError>
-where
-    I: AsRef<[usize]>,
-{
-    let indices = index.data.as_ref();
+    index: PermuteIndex,
+) -> Result<(), PermuteError> {
+    let indices = index.data;
     let len = data.len();
     if indices.len() != len {
         return Err(PermuteError::LengthMismatch);
@@ -143,10 +133,10 @@ where
     // so we can move elements without overlap.
 
     // Create a Vec<T> with uninitialized memory
-    let mut temp: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
-    unsafe {
-        temp.resize_with(len, MaybeUninit::uninit);
+    let mut raw_temp: Vec<T> = Vec::with_capacity(len);
+    let temp = raw_temp.spare_capacity_mut();
 
+    unsafe {
         for (i, &idx) in indices.iter().enumerate() {
             // Move from data[idx] to temp[i]
             let value = ptr::read(data.get_unchecked(idx));
@@ -155,13 +145,9 @@ where
         }
 
         // Move back from temp to data
-        for i in 0..len {
-            // SAFETY: We are reading from an initialized MaybeUninit<T>
-            let value = temp.get_unchecked(i).as_ptr().read();
-            // Move to data[i]
-            ptr::write(data.get_unchecked_mut(i), value);
-        }
-        drop(temp); 
+        // Use ptr::copy_nonoverlapping to copy all elements from temp to data
+        // SAFETY: We are copying from a valid memory location to another valid memory location
+        ptr::copy_nonoverlapping(temp.as_ptr() as *const T, data.as_mut_ptr(), len);
     }
     Ok(())
 }
@@ -176,9 +162,9 @@ where
 /// index_permute::order_by_index_inplace(&mut data, index);
 /// assert_eq!(data, vec![30, 10, 20]);
 /// ```
-pub fn order_by_index_inplace<T, I>(data: &mut [T], index: PermuteIndex<I>)
+pub fn order_by_index_inplace<T>(data: &mut [T], index: PermuteIndex)
 where
-    I: AsRef<[usize]>,
+    T: Send,
 {
     if let Err(e) = try_order_by_index_inplace(data, index) {
         panic!("Failed to order by index: {}", e);
@@ -198,13 +184,12 @@ cfg_parallel! {
 ///
 /// Improved parallel version
 
-pub fn try_order_by_index_parallel_inplace_with_threads<T, I>(
+pub fn try_order_by_index_parallel_inplace_with_threads<T>(
     data: &mut [T],
-    index: PermuteIndex<I>,
+    index: PermuteIndex,
     num_threads: usize,
 ) -> Result<(), PermuteError>
 where
-    I: AsRef<[usize]>,
     T: Sync + Send,
 {
     let len = data.len();
@@ -213,16 +198,16 @@ where
         return try_order_by_index_inplace(data, index);
     }
 
-    if len != index.data.as_ref().len() {
+    if len != index.data.len() {
         return Err(PermuteError::LengthMismatch);
     }
 
-    let indices = index.data.as_ref();
+    let indices = index.data;
     let chunk_size = (len + num_threads - 1) / num_threads;
 
     // Create buffer with proper initialization
-    let mut buffer: Vec<std::mem::MaybeUninit<T>> = Vec::with_capacity(len);
-    buffer.resize_with(len, std::mem::MaybeUninit::uninit);
+    let mut raw_buffer: Vec<T> = Vec::with_capacity(len);
+    let buffer = raw_buffer.spare_capacity_mut();
 
     // Convert data to shared reference for reading
     let data_ref = &*data;
@@ -248,25 +233,21 @@ where
     // Now buffer contains all the reordered data
     // Phase 2: Move from buffer back to data
     unsafe {
-        for i in 0..len {
-            let value = buffer.get_unchecked(i).as_ptr().read();
-            ptr::write(data.get_unchecked_mut(i), value);
-        }
+        // SAFETY: We are copying from a valid memory location to another valid memory location
+        ptr::copy_nonoverlapping(buffer.as_ptr() as *const T, data.as_mut_ptr(), len);
     }
 
-    // Buffer will be dropped but MaybeUninit won't drop the T values
-    std::mem::drop(buffer);
+
 
     Ok(())
 }
 /// Same as [`try_order_by_index_parallel_inplace_with_threads`] but uses the number of available CPU cores.
 /// Only valid when features `parallel` is enabled.
-pub fn try_order_by_index_parallel_inplace<T, I>(
+pub fn try_order_by_index_parallel_inplace<T>(
     data: &mut [T],
-    index: PermuteIndex<I>,
+    index: PermuteIndex,
 ) -> Result<(), PermuteError>
 where
-    I: AsRef<[usize]>,
     T: Sync + Send,
 {
     let num_threads = num_cpus::get();
@@ -280,8 +261,8 @@ mod tests {
     #[test]
     fn test_permute_index() {
         let _ = PermuteIndex::try_new(&[0usize, 2, 1]);
-        let _ = PermuteIndex::try_new(vec![0, 1, 2]);
-        let _ = PermuteIndex::try_new(&vec![0, 1, 2]);
+        let vec_data = vec![0, 1, 2];
+        let _ = PermuteIndex::try_new(&vec_data);
         let _ = PermuteIndex::try_new(&[0, 1, 2][..]);
     }
 
@@ -323,7 +304,8 @@ mod tests {
     #[cfg(feature = "parallel")]
     fn test_order_by_index_parallel() {
         let mut data = (0..1000).collect::<Vec<_>>();
-        let index = PermuteIndex::try_new((0..1000).rev().collect::<Vec<_>>()).unwrap();
+        let index_vec = (0..1000).rev().collect::<Vec<_>>();
+        let index = PermuteIndex::try_new(&index_vec).unwrap();
         assert!(try_order_by_index_parallel_inplace(&mut data, index).is_ok());
         assert_eq!(data, (0..1000).rev().collect::<Vec<_>>());
     }
@@ -343,7 +325,8 @@ mod tests {
         let mut data = (0..test_size)
             .map(|i| DropTest { value: i })
             .collect::<Vec<_>>();
-        let index = PermuteIndex::try_new((0..test_size).rev().collect::<Vec<_>>()).unwrap();
+        let index_vec = (0..test_size).rev().collect::<Vec<_>>();
+        let index = PermuteIndex::try_new(&index_vec).unwrap();
 
         // now, there should be no drop
         try_order_by_index_parallel_inplace_with_threads(&mut data, index, 4).unwrap();
