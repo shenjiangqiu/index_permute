@@ -14,6 +14,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 
+#[cfg(feature = "parallel")]
 use std::ptr;
 use thiserror::Error;
 mod macro_rules;
@@ -107,6 +108,28 @@ impl<'a> PermuteIndex<'a> {
         // It should only be used when you are sure that the index is valid.
         PermuteIndex { data: index }
     }
+
+    fn generate_swaps(&self) -> Vec<(usize, usize)> {
+        let mut visited = vec![false; self.data.len()];
+        let mut swaps = vec![];
+
+        for i in 0..self.data.len() {
+            if visited[i] || self.data[i] == i {
+                continue;
+            }
+
+            let mut x = i;
+
+            while !visited[self.data[x]] {
+                visited[x] = true;
+                x = self.data[x];
+                swaps.push((i, x));
+            }
+        }
+
+        swaps.reverse();
+        swaps
+    }
 }
 
 /// Reorders the data in place according to the given index.
@@ -123,32 +146,14 @@ pub fn try_order_by_index_inplace<T>(
     data: &mut [T],
     index: PermuteIndex,
 ) -> Result<(), PermuteError> {
-    let indices = index.data;
-    let len = data.len();
-    if indices.len() != len {
+    if index.data.len() != data.len() {
         return Err(PermuteError::LengthMismatch);
     }
 
-    // SAFETY: indices are unique and a valid permutation of 0..len,
-    // so we can move elements without overlap.
-
-    // Create a Vec<T> with uninitialized memory
-    let mut raw_temp: Vec<T> = Vec::with_capacity(len);
-    let temp = raw_temp.spare_capacity_mut();
-
-    unsafe {
-        for (i, &idx) in indices.iter().enumerate() {
-            // Move from data[idx] to temp[i]
-            let value = ptr::read(data.get_unchecked(idx));
-            // SAFETY: We are writing to an uninitialized memory location
-            temp.get_unchecked_mut(i).write(value);
-        }
-
-        // Move back from temp to data
-        // Use ptr::copy_nonoverlapping to copy all elements from temp to data
-        // SAFETY: We are copying from a valid memory location to another valid memory location
-        ptr::copy_nonoverlapping(temp.as_ptr() as *const T, data.as_mut_ptr(), len);
+    for (a, b) in index.generate_swaps() {
+        data.swap(a, b);
     }
+
     Ok(())
 }
 
@@ -257,6 +262,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_generate_swaps() {
+        let index = PermuteIndex::try_new(&[2, 0, 1, 4, 3]).unwrap();
+        assert_eq!(index.generate_swaps(), vec![(3, 4), (0, 1), (0, 2)]);
+    }
 
     #[test]
     fn test_permute_index() {
